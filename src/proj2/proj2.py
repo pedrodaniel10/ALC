@@ -21,6 +21,14 @@ class Literal:
         return self.name
 
 
+class Int:
+    def __init__(self, value):
+        self.value = value
+
+    def render(self):
+        return str(self.value)
+
+
 class BinaryExpression:
     def __init__(self, left, right):
         self.left = left
@@ -58,10 +66,30 @@ class Implies(BinaryExpression):
         self.name = "=>"
 
 
+class Sum(BinaryExpression):
+    def __init__(self, left, right):
+        super().__init__(left, right)
+        self.name = "+"
+
+
+class Equals(BinaryExpression):
+    def __init__(self, left, right):
+        super().__init__(left, right)
+        self.name = "="
+
+
 class Not(UnaryExpression):
     def __init__(self, expr):
         super().__init__(expr)
         self.name = "not"
+
+
+class B2i(UnaryExpression):
+    definition = "(define-fun b2i ((b Bool)) Int (ite b 1 0))"
+
+    def __init__(self, expr):
+        super().__init__(expr)
+        self.name = "b2i"
 
 
 def lr(i, n):
@@ -74,6 +102,16 @@ def rr(i, n):
     return set(filter(lambda x: x % 2 != 0 and abs(i - x) >= 2, [j for j in range(i + 2, min(2 * i + 1, n)+1)]))
 
 
+def cardinality_constraints(expr):
+    def sum_recursive(expr):
+        assert(len(expr) > 0)
+        if len(expr) == 1:
+            return B2i(expr[0])
+        return Sum(B2i(expr[0]), sum_recursive(expr[1:]))
+
+    return Equals(sum_recursive(expr), Int(1))
+
+
 class Enc:
     def __init__(self, input_count, samples):
         self.samples = samples
@@ -81,15 +119,15 @@ class Enc:
         self.constraints = []
 
     def v(self, i): return Literal('v_{}'.format(i))
-    def l(self, i, j): return Literal('l_{},{}'.format(i, j))
-    def r(self, i, j): return Literal('r_{},{}'.format(i, j))
-    def p(self, j, i): return Literal('p_{},{}'.format(j, i))
+    def l(self, i, j): return Literal('l_{}_{}'.format(i, j))
+    def r(self, i, j): return Literal('r_{}_{}'.format(i, j))
+    def p(self, j, i): return Literal('p_{}_{}'.format(j, i))
     def s(self, i): return Literal('s_{}'.format(i))
-    def u(self, r, j): return Literal('u_{},{}'.format(r, j))
-    def d(self, sigma, r, j): return Literal('d{}_{},{}'.format(sigma, r, j))
-    def d0(self, r, j): return Literal('d0_{},{}'.format(r, j))
-    def d1(self, r, j): return Literal('d1_{},{}'.format(r, j))
-    def a(self, r, i): return Literal('a_{},{}'.format(r, i))
+    def u(self, r, j): return Literal('u_{}_{}'.format(r, j))
+    def d(self, sigma, r, j): return Literal('d{}_{}_{}'.format(sigma, r, j))
+    def d0(self, r, j): return Literal('d0_{}_{}'.format(r, j))
+    def d1(self, r, j): return Literal('d1_{}_{}'.format(r, j))
+    def a(self, r, i): return Literal('a_{}_{}'.format(r, i))
     def c(self, i): return Literal('c_{}'.format(i))
 
     def eq(self, q):
@@ -107,15 +145,63 @@ class Enc:
         '''add constraints, which is a list of literals'''
         self.constraints.append(constraint)
 
-    def enc(self):
+    def add_iff(self, left, right):
+        '''add iff constraint between left and right'''
+        self.add_constraint(Implies(left, right))
+        self.add_constraint(Implies(right, left))
+
+    def enc(self, node_count):
         '''encode the problem'''
-        print("")
-        self.add_constraint(And(self.v(1), self.v(2)))
-        # self.encode_tree(self.node_count)
+        self.node_count = node_count
+        self.encode_tree(node_count)
         # self.encode_decision(self.input_count, self.node_count)
+
+    def encode_tree(self, n):
+        # Constraint 1: ~v1
+        self.add_constraint(Not(self.v(1)))
+
+        # vn and vn-1 are leaves
+        self.add_constraint(self.v(n))
+        self.add_constraint(self.v(n-1))
+
+        # Constraint 2: vi => -lij
+        # No need to do for v1 as from (1), v1 is never a leaf
+        for i in range(2, n + 1):
+            for j in lr(i, n):
+                self.add_constraint(Implies(self.v(i), Not(self.l(i, j))))
+
+        # Constraint 3: lij <=> rij+1
+        for i in range(1, n + 1):
+            for j in lr(i, n):
+                self.add_iff(self.l(i, j), self.r(i, j+1))
+
+        # Constraint 4: sum_{j in LR(i)} lij = 1
+        # No need to do for i = n-1 and i = n-2, as both nodes are necessarily leaves
+        for i in range(1, n - 1):
+            literals = [self.l(i, j) for j in lr(i, n)]
+            self.add_constraint(
+                Implies(Not(self.v(i)), cardinality_constraints(literals)))
+
+        # Constraint 5: pji <=> lij, pji <=> rij
+        # No need to do for i = n-1 and i = n-2, as both nodes are necessarily leaves
+        for i in range(1, n - 1):
+            for j in lr(i, n):
+                self.add_iff(self.p(j, i), self.l(i, j))
+            for j in rr(i, n):
+                self.add_iff(self.p(j, i), self.r(i, j))
+
+        # Constraint 6: sum_{j/2}^{min(j-1, N)}
+        for j in range(2, n + 1):
+            literals = []
+            for i in range(int(j/2), min(j - 1, n) + 1):
+                literals.append(self.p(j, i))
+            self.add_constraint(cardinality_constraints(literals))
 
     def write_enc(self, file_name):
         smt_lib = open(file_name, "w")
+
+        # Define funcs
+        print(B2i.definition, file=smt_lib)
 
         # Declare consts
         for literal in Literal.literals:
@@ -131,36 +217,30 @@ class Enc:
     def print_model(self, model):
         '''prints SAT model, eventually should print the decision tree'''
         print('# === model')
-#        for str_var in sorted(self.var_map.keys()):
-#            v = self.var_map[str_var]
-#            val = '?'
-#            if v in model and model[v]:
-#                val = 'T'
-#            if v in model and not model[v]:
-#                val = 'F'
-#            print('# {}={} ({})'.format(str_var, val, v))
-#        print('# === end of model')
-#        print('# === tree')
-#
-#        for str_var in sorted(self.var_map.keys()):
-#            v = self.var_map[str_var]
-#            if v not in model or not model[v]:
-#                continue
-#
-#            if re.match("^(l|r|a)", str_var):
-#                index = re.findall(r'\d+', str_var)
-#                print("{} {} {}".format(str_var[0], index[0], index[1]))
-#
-#        leaves = []
-#        for i in range(2, self.node_count + 1):
-#            v = self.var_map[self.v(i)]
-#            if v in model and model[v]:
-#                leaves.append(i)
-#
-#        for i in leaves:
-#            v = self.var_map[self.c(i)]
-#            print("c {} {}".format(i, {False: 0, True: 1}[model[v]]))
-#
+        for str_var in sorted(model.keys()):
+            val = '?'
+            if model[str_var]:
+                val = 'T'
+            if not model[str_var]:
+                val = 'F'
+            print('# {} = {}'.format(str_var, val))
+        print('# === end of model')
+        print('# === tree')
+
+        for str_var in sorted(model.keys()):
+            if model[str_var] and re.match("^(l|r|a)", str_var):
+                index = re.findall(r'\d+', str_var)
+                print("{} {} {}".format(str_var[0], index[0], index[1]))
+
+        leaves = []
+        for i in range(2, self.node_count + 1):
+            v = self.v(i).render()
+            if v in model and model[v]:
+                leaves.append(i)
+
+        for i in leaves:
+            print("c {} {}".format(i, {False: 0, True: 1}[model[v]]))
+
         print('# === end of tree')
 
 
@@ -255,7 +335,7 @@ if __name__ == "__main__":
     nms, samples = parse(sys.stdin)
     print("# encoding")
     e = Enc(nms[0], samples)
-    e.enc()
+    e.enc(nms[1])
     print("# encoded constraints")
     e.write_enc(file_name)
     # print("# " + "\n# ".join(map(str, e.constraints)))
@@ -267,10 +347,9 @@ if __name__ == "__main__":
     (output, err) = p.communicate()
     print("# decoding result from solver")
     rc = p.returncode
-    print(rc)
     if len(nms) == 2:
         print("# Expecting {} nodes.".format(nms[1]))
     if rc == 0:
-        get_model(output.decode("UTF-8"))
+        e.print_model(get_model(output.decode("UTF-8")))
     else:
         print("ERROR: something went wrong with the solver")
