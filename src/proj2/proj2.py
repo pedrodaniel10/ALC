@@ -102,14 +102,21 @@ def rr(i, n):
     return set(filter(lambda x: x % 2 != 0 and abs(i - x) >= 2, [j for j in range(i + 2, min(2 * i + 1, n)+1)]))
 
 
-def cardinality_constraints(expr):
+def cardinality_constraints(expr, result):
     def sum_recursive(expr):
         assert(len(expr) > 0)
         if len(expr) == 1:
             return B2i(expr[0])
         return Sum(B2i(expr[0]), sum_recursive(expr[1:]))
 
-    return Equals(sum_recursive(expr), Int(1))
+    return Equals(sum_recursive(expr), Int(result))
+
+
+def bin_recursive(Bin, expr):
+    assert(len(expr) > 0)
+    if len(expr) == 1:
+        return expr[0]
+    return Bin(expr[0], bin_recursive(Bin, expr[1:]))
 
 
 class Enc:
@@ -145,6 +152,10 @@ class Enc:
         '''add constraints, which is a list of literals'''
         self.constraints.append(constraint)
 
+    def add_if(self, left, right):
+        '''add iff constraint between left and right'''
+        self.add_constraint(Implies(left, right))
+
     def add_iff(self, left, right):
         '''add iff constraint between left and right'''
         self.add_constraint(Implies(left, right))
@@ -154,7 +165,7 @@ class Enc:
         '''encode the problem'''
         self.node_count = node_count
         self.encode_tree(node_count)
-        # self.encode_decision(self.input_count, self.node_count)
+        self.encode_decision(self.input_count, self.node_count)
 
     def encode_tree(self, n):
         # Constraint 1: ~v1
@@ -168,7 +179,7 @@ class Enc:
         # No need to do for v1 as from (1), v1 is never a leaf
         for i in range(2, n + 1):
             for j in lr(i, n):
-                self.add_constraint(Implies(self.v(i), Not(self.l(i, j))))
+                self.add_if(self.v(i), Not(self.l(i, j)))
 
         # Constraint 3: lij <=> rij+1
         for i in range(1, n + 1):
@@ -180,7 +191,7 @@ class Enc:
         for i in range(1, n - 1):
             literals = [self.l(i, j) for j in lr(i, n)]
             self.add_constraint(
-                Implies(Not(self.v(i)), cardinality_constraints(literals)))
+                Implies(Not(self.v(i)), cardinality_constraints(literals, 1)))
 
         # Constraint 5: pji <=> lij, pji <=> rij
         # No need to do for i = n-1 and i = n-2, as both nodes are necessarily leaves
@@ -195,7 +206,68 @@ class Enc:
             literals = []
             for i in range(int(j/2), min(j - 1, n) + 1):
                 literals.append(self.p(j, i))
-            self.add_constraint(cardinality_constraints(literals))
+            self.add_constraint(cardinality_constraints(literals, 1))
+
+    def discriminateFeature(self, d, branch, children, k, n):
+        '''This function will make the constraints (7) or (8) depending 
+           on parameters given.'''
+        for r in range(1, k+1):
+            for j in range(2, n + 1):
+                ands = []
+                for i in range(int(j/2), j):
+                    ands.append(And(self.p(j, i), d(r, i)))
+                    ands.append(And(self.a(r, i), branch(i, j)))
+
+                self.add_iff(d(r, j), bin_recursive(Or, ands))
+            self.add_constraint(Not(d(r, 1)))
+
+        for j in range(2, n + 1):
+            for i in range(int(j/2), j):
+                childrens = children(i, n)
+                # lij/rij that don't exist are false
+                if j not in childrens:
+                    self.add_constraint(Not(branch(i, j)))
+
+    def encode_decision(self, k, n):
+        '''This will encode the decision (constraints 7 to 13)'''
+        # Constraint 7:
+        self.discriminateFeature(self.d0, self.r, rr, k, n)
+
+        # Constraint 8:
+        self.discriminateFeature(self.d1, self.l, lr, k, n)
+
+         # Constrain 9:
+        for j in range(1, n + 1):
+            for r in range(1, k + 1):
+                for i in range(int(j/2), j):
+                    # 1st part: 
+                    self.add_if(And(self.u(r,i), self.p(j,i)), Not(self.a(r,j)))
+
+                # 2nd part
+                self.add_iff(self.u(r,j), Or(self.a(r,j), bin_recursive(Or, [And(self.u(r,i), self.p(j,i)) for i in range(int(j/2), j)])))
+
+        # Constraint 10 and 11:
+        # For (10) we don't need to do the nodes n and n-1, they are leaves
+        # For (11) we don't need to do the node 1, as is the root and non-leaf
+        for j in range(1, n + 1):
+            # Constraint 10
+            if j < n - 1:
+                self.add_if(Not(self.v(j)), cardinality_constraints([self.a(r, j) for r in range(1, k+1)], 1))
+            # Constraint 11
+            if j != 1:
+                self.add_if(self.v(j), cardinality_constraints([self.a(r, j) for r in range(1, k+1)], 0))
+
+        # Constraints 12 and 13: j can start in 2 as 1 is root (non-leaf)
+        for j in range(2, n+1):
+            for q in range(1, len(self.samples) + 1):
+                discriminatedSamples = [self.d(self.sigma(r, q), r, j) for r in range(1, k+1)]
+                assert(self.eq(q) in (0, 1))
+                # Constraint 13
+                if self.eq(q) == 0:
+                    self.add_if(And(self.v(j), self.c(j)), bin_recursive(Or, discriminatedSamples))
+                # Constraint 12
+                if self.eq(q) == 1:
+                    self.add_if(And(self.v(j), Not(self.c(j))), bin_recursive(Or, discriminatedSamples))
 
     def write_enc(self, file_name):
         smt_lib = open(file_name, "w")
@@ -239,6 +311,7 @@ class Enc:
                 leaves.append(i)
 
         for i in leaves:
+            v = self.c(i).render()
             print("c {} {}".format(i, {False: 0, True: 1}[model[v]]))
 
         print('# === end of tree')
