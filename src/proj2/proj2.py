@@ -136,6 +136,8 @@ class Enc:
     def d1(self, r, j): return Literal('d1_{}_{}'.format(r, j))
     def a(self, r, i): return Literal('a_{}_{}'.format(r, i))
     def c(self, i): return Literal('c_{}'.format(i))
+    def lamb(self, t, i): return Literal('ulamb_{}_{}'.format(t, i))
+    def tau(self, t, i): return Literal('tau_{}_{}'.format(t, i))
 
     def eq(self, q):
         '''Returns the classification of example q'''
@@ -166,6 +168,7 @@ class Enc:
         self.node_count = node_count
         self.encode_tree(node_count)
         self.encode_decision(self.input_count, self.node_count)
+        self.encode_additional_constraints(self.node_count)
 
     def encode_tree(self, n):
         # Constraint 1: ~v1
@@ -269,6 +272,27 @@ class Enc:
                 if self.eq(q) == 1:
                     self.add_if(And(self.v(j), Not(self.c(j))), bin_recursive(Or, discriminatedSamples))
 
+    def encode_additional_constraints(self, n):
+        # Lambda
+        for i in range(1, n+1):
+            # 1
+            self.add_constraint(self.lamb(0,i))
+            for t in range(1, int(i/2) + 1):
+                # 2
+                self.add_iff(self.lamb(t,i), Or(self.lamb(t,i-1), And(self.lamb(t-1,i-1), self.v(i))))
+                # Proposition 2
+                self.add_if(self.lamb(t,i), And(Not(self.l(i,2*(i-t+1))), Not(self.r(i,2*(i-t+1)+1))))
+
+        # Tau
+        for i in range(1, n+1):
+            # 1
+            self.add_constraint(self.tau(0,i))
+            for t in range(1, int(i/2) + 2):
+                # 2
+                self.add_iff(self.tau(t,i), Or(self.tau(t,i-1), And(self.tau(t-1,i-1), Not(self.v(i)))))
+                # Proposition 2
+                self.add_if(self.tau(t,i), And(Not(self.l(i,2*(t-1))), Not(self.r(i,2*t - 1))))
+
     def write_enc(self, file_name):
         smt_lib = open(file_name, "w")
 
@@ -302,6 +326,8 @@ class Enc:
         for str_var in sorted(model.keys()):
             if model[str_var] and re.match("^(l|r|a)", str_var):
                 index = re.findall(r'\d+', str_var)
+                if str_var[0] in ("l", "r") and int(index[0]) >= int(index[1]):
+                    continue
                 print("{} {} {}".format(str_var[0], index[0], index[1]))
 
         leaves = []
@@ -312,7 +338,10 @@ class Enc:
 
         for i in leaves:
             v = self.c(i).render()
-            print("c {} {}".format(i, {False: 0, True: 1}[model[v]]))
+            if v not in model:
+                print("c {} {}".format(i, self.eq(1)))
+            else:
+                print("c {} {}".format(i, {False: 0, True: 1}[model[v]]))
 
         print('# === end of tree')
 
