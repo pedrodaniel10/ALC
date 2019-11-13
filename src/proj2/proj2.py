@@ -2,6 +2,7 @@
 import sys
 import subprocess
 import re
+from id3 import *
 
 file_name = "smt_lib"
 solver = ['z3']
@@ -19,6 +20,10 @@ class Literal:
 
     def render(self):
         return self.name
+    
+    @staticmethod
+    def clean():
+        Literal.literals = set()
 
 
 class Int:
@@ -120,9 +125,10 @@ def bin_recursive(Bin, expr):
 
 
 class Enc:
-    def __init__(self, input_count, samples):
+    def __init__(self, input_count, samples, node_count=3):
         self.samples = samples
         self.input_count = input_count
+        self.node_count = node_count
         self.constraints = []
 
     def v(self, i): return Literal('v_{}'.format(i))
@@ -167,8 +173,8 @@ class Enc:
         '''encode the problem'''
         self.node_count = node_count
         self.encode_tree(node_count)
-        self.encode_decision(self.input_count, self.node_count)
-        self.encode_additional_constraints(self.node_count)
+        #self.encode_decision(self.input_count, self.node_count)
+        #self.encode_additional_constraints(self.node_count)
 
     def encode_tree(self, n):
         # Constraint 1: ~v1
@@ -435,23 +441,44 @@ def parse(f):
 if __name__ == "__main__":
     print("# reading from stdin")
     nms, samples = parse(sys.stdin)
-    print("# encoding")
-    e = Enc(nms[0], samples)
-    e.enc(nms[1])
-    print("# encoded constraints")
-    e.write_enc(file_name)
-    # print("# " + "\n# ".join(map(str, e.constraints)))
-    print("# END encoded constraints")
-    print("# sending to solver '" + solver + "'")
+    print("# Running id3")
+    root = run_id3(samples, nms[0])
+    n = get_number_nodes(root)
+    model = get_model_id3(root)
+    print("# Obtained tree with {} nodes from id3".format(n))
+    i = n - 2
+    node_count = n
+    while True:
+        if n < 3:
+            i=3
+        if i < 3:
+            break
+        print("# encoding with {} nodes".format(i))
+        e = Enc(nms[0], samples)
+        e.enc(i)
+        print("# encoded constraints to file")
+        e.write_enc(file_name)
+        print("# END encoded constraints")
+        print("# sending to solver '" + solver + "'")
 
-    p = subprocess.Popen(solver, shell=True, stdin=subprocess.PIPE,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (output, err) = p.communicate()
-    print("# decoding result from solver")
-    rc = p.returncode
+        p = subprocess.Popen(solver, shell=True, stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (output, err) = p.communicate()
+        print("# decoding result from solver")
+        new_model = get_model(output.decode("UTF-8"))
+        sat = (model != None)
+        if new_model == None: # => UNSAT
+            print("# UNSAT, output last SAT model")
+            break
+        else:
+            node_count = i
+            i -=2
+            model = new_model
+            Literal.clean()
+
+    e = Enc(nms[0], samples, node_count = node_count)
+    e.print_model(model)
+    print("# Model has {} nodes".format(node_count))
+
     if len(nms) == 2:
         print("# Expecting {} nodes.".format(nms[1]))
-    if rc == 0:
-        e.print_model(get_model(output.decode("UTF-8")))
-    else:
-        print("ERROR: something went wrong with the solver")
