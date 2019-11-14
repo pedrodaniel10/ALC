@@ -2,99 +2,14 @@
 import sys
 import subprocess
 import re
-from id3 import *
+from expressions import *
+from id3 import run_id3, get_number_nodes, get_model_id3
 
 file_name = "smt_lib"
 solver = ['z3']
 args = [file_name]
 solver.extend(args)
 solver = " ".join(solver)
-
-
-class Literal:
-    literals = set()
-
-    def __init__(self, name):
-        self.name = name
-        Literal.literals.add(name)
-
-    def render(self):
-        return self.name
-    
-    @staticmethod
-    def clean():
-        Literal.literals = set()
-
-
-class Int:
-    def __init__(self, value):
-        self.value = value
-
-    def render(self):
-        return str(self.value)
-
-
-class BinaryExpression:
-    def __init__(self, left, right):
-        self.left = left
-        self.right = right
-        self.name = ""
-
-    def render(self):
-        return "({} {} {})".format(self.name, self.left.render(), self.right.render())
-
-
-class UnaryExpression:
-    def __init__(self, expr):
-        self.expr = expr
-        self.name = ""
-
-    def render(self):
-        return "({} {})".format(self.name, self.expr.render())
-
-
-class And(BinaryExpression):
-    def __init__(self, left, right):
-        super().__init__(left, right)
-        self.name = "and"
-
-
-class Or(BinaryExpression):
-    def __init__(self, left, right):
-        super().__init__(left, right)
-        self.name = "or"
-
-
-class Implies(BinaryExpression):
-    def __init__(self, left, right):
-        super().__init__(left, right)
-        self.name = "=>"
-
-
-class Sum(BinaryExpression):
-    def __init__(self, left, right):
-        super().__init__(left, right)
-        self.name = "+"
-
-
-class Equals(BinaryExpression):
-    def __init__(self, left, right):
-        super().__init__(left, right)
-        self.name = "="
-
-
-class Not(UnaryExpression):
-    def __init__(self, expr):
-        super().__init__(expr)
-        self.name = "not"
-
-
-class B2i(UnaryExpression):
-    definition = "(define-fun b2i ((b Bool)) Int (ite b 1 0))"
-
-    def __init__(self, expr):
-        super().__init__(expr)
-        self.name = "b2i"
 
 
 def lr(i, n):
@@ -173,8 +88,8 @@ class Enc:
         '''encode the problem'''
         self.node_count = node_count
         self.encode_tree(node_count)
-        #self.encode_decision(self.input_count, self.node_count)
-        #self.encode_additional_constraints(self.node_count)
+        self.encode_decision(self.input_count, self.node_count)
+        self.encode_additional_constraints(self.node_count)
 
     def encode_tree(self, n):
         # Constraint 1: ~v1
@@ -245,15 +160,17 @@ class Enc:
         # Constraint 8:
         self.discriminateFeature(self.d1, self.l, lr, k, n)
 
-         # Constrain 9:
+        # Constrain 9:
         for j in range(1, n + 1):
             for r in range(1, k + 1):
                 for i in range(int(j/2), j):
-                    # 1st part: 
-                    self.add_if(And(self.u(r,i), self.p(j,i)), Not(self.a(r,j)))
+                    # 1st part:
+                    self.add_if(And(self.u(r, i), self.p(j, i)),
+                                Not(self.a(r, j)))
 
                 # 2nd part
-                self.add_iff(self.u(r,j), Or(self.a(r,j), bin_recursive(Or, [And(self.u(r,i), self.p(j,i)) for i in range(int(j/2), j)])))
+                self.add_iff(self.u(r, j), Or(self.a(r, j), bin_recursive(
+                    Or, [And(self.u(r, i), self.p(j, i)) for i in range(int(j/2), j)])))
 
         # Constraint 10 and 11:
         # For (10) we don't need to do the nodes n and n-1, they are leaves
@@ -261,43 +178,52 @@ class Enc:
         for j in range(1, n + 1):
             # Constraint 10
             if j < n - 1:
-                self.add_if(Not(self.v(j)), cardinality_constraints([self.a(r, j) for r in range(1, k+1)], 1))
+                self.add_if(Not(self.v(j)), cardinality_constraints(
+                    [self.a(r, j) for r in range(1, k+1)], 1))
             # Constraint 11
             if j != 1:
-                self.add_if(self.v(j), cardinality_constraints([self.a(r, j) for r in range(1, k+1)], 0))
+                self.add_if(self.v(j), cardinality_constraints(
+                    [self.a(r, j) for r in range(1, k+1)], 0))
 
         # Constraints 12 and 13: j can start in 2 as 1 is root (non-leaf)
         for j in range(2, n+1):
             for q in range(1, len(self.samples) + 1):
-                discriminatedSamples = [self.d(self.sigma(r, q), r, j) for r in range(1, k+1)]
+                discriminatedSamples = [
+                    self.d(self.sigma(r, q), r, j) for r in range(1, k+1)]
                 assert(self.eq(q) in (0, 1))
                 # Constraint 13
                 if self.eq(q) == 0:
-                    self.add_if(And(self.v(j), self.c(j)), bin_recursive(Or, discriminatedSamples))
+                    self.add_if(And(self.v(j), self.c(j)),
+                                bin_recursive(Or, discriminatedSamples))
                 # Constraint 12
                 if self.eq(q) == 1:
-                    self.add_if(And(self.v(j), Not(self.c(j))), bin_recursive(Or, discriminatedSamples))
+                    self.add_if(And(self.v(j), Not(self.c(j))),
+                                bin_recursive(Or, discriminatedSamples))
 
     def encode_additional_constraints(self, n):
         # Lambda
         for i in range(1, n+1):
             # 1
-            self.add_constraint(self.lamb(0,i))
+            self.add_constraint(self.lamb(0, i))
             for t in range(1, int(i/2) + 1):
                 # 2
-                self.add_iff(self.lamb(t,i), Or(self.lamb(t,i-1), And(self.lamb(t-1,i-1), self.v(i))))
+                self.add_iff(self.lamb(t, i), Or(self.lamb(t, i-1),
+                                                 And(self.lamb(t-1, i-1), self.v(i))))
                 # Proposition 2
-                self.add_if(self.lamb(t,i), And(Not(self.l(i,2*(i-t+1))), Not(self.r(i,2*(i-t+1)+1))))
+                self.add_if(self.lamb(t, i), And(
+                    Not(self.l(i, 2*(i-t+1))), Not(self.r(i, 2*(i-t+1)+1))))
 
         # Tau
         for i in range(1, n+1):
             # 1
-            self.add_constraint(self.tau(0,i))
+            self.add_constraint(self.tau(0, i))
             for t in range(1, int(i/2) + 2):
                 # 2
-                self.add_iff(self.tau(t,i), Or(self.tau(t,i-1), And(self.tau(t-1,i-1), Not(self.v(i)))))
+                self.add_iff(self.tau(t, i), Or(self.tau(t, i-1),
+                                                And(self.tau(t-1, i-1), Not(self.v(i)))))
                 # Proposition 2
-                self.add_if(self.tau(t,i), And(Not(self.l(i,2*(t-1))), Not(self.r(i,2*t - 1))))
+                self.add_if(self.tau(t, i), And(
+                    Not(self.l(i, 2*(t-1))), Not(self.r(i, 2*t - 1))))
 
     def write_enc(self, file_name):
         smt_lib = open(file_name, "w")
@@ -449,8 +375,8 @@ if __name__ == "__main__":
     i = n - 2
     node_count = n
     while True:
-        if n < 3:
-            i=3
+        if node_count == 1:
+            i = 3
         if i < 3:
             break
         print("# encoding with {} nodes".format(i))
@@ -462,21 +388,20 @@ if __name__ == "__main__":
         print("# sending to solver '" + solver + "'")
 
         p = subprocess.Popen(solver, shell=True, stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (output, err) = p.communicate()
         print("# decoding result from solver")
         new_model = get_model(output.decode("UTF-8"))
-        sat = (model != None)
-        if new_model == None: # => UNSAT
+        if new_model == None:  # => UNSAT
             print("# UNSAT, output last SAT model")
             break
         else:
             node_count = i
-            i -=2
+            i -= 2
             model = new_model
             Literal.clean()
 
-    e = Enc(nms[0], samples, node_count = node_count)
+    e = Enc(nms[0], samples, node_count=node_count)
     e.print_model(model)
     print("# Model has {} nodes".format(node_count))
 
