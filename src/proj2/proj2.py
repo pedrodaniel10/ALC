@@ -6,9 +6,11 @@ from expressions import *
 from id3 import run_id3, get_number_nodes, get_model_id3
 
 file_name = "smt_lib"
-solver = ['z3']
-args = [file_name]
-solver.extend(args)
+solvers = {
+    "z3": ['z3', file_name],
+    "cvc4": ['cvc4', "--lang smt", "--produce-models", file_name]
+}
+solver = solvers["z3"]
 solver = " ".join(solver)
 
 
@@ -279,12 +281,19 @@ class Enc:
 
 
 def get_model(output):
-    if not output.startswith("sat"):
+    output = output.split("\n")
+
+    while len(output) > 0 and output[0] != "sat":
+        output = output[1:]
+
+    if len(output) == 0:
         return None
 
-    # remove break lines
-    output = output[3:]
-    output = output.replace("\n", "")
+    # Remove sat from list
+    output = output[1:]
+    # Convert to String
+    output = "".join(output)
+    # Remove double spaces and get a list
     output = " ".join(output.split()).split()
 
     stack = []
@@ -332,7 +341,7 @@ def get_model(output):
     values = dict()
     for fun in model[1:]:
         if not isinstance(fun, list) or len(fun) != 5 or fun[0] != "define-fun":
-            raise ValueError("Found a non function definition in model.")
+            continue
         name = fun[1]
         typeFun = fun[3]
         value = fun[4]
