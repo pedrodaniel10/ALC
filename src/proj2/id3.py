@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# This file was originally from https://github.com/tofti/python-id3-trees
+# Last modified by Pedro Lopes at Fri Nov 15 11:07:00 WEST 2019
 import sys
 import math
 import os
@@ -137,12 +140,27 @@ def get_number_nodes(node):
         return 1
     elif 'attribute' in node:
         sum = 1
+        if len(node['nodes']) != 2:
+            sum = 0
+
         for subnode_key in node['nodes']:
             sum += get_number_nodes(node['nodes'][subnode_key])
         return sum
 
 
 def get_model_id3(root):
+    def prune(node):
+        if 'label' in node:
+            return node
+        elif 'attribute' in node:
+            if len(node['nodes']) == 1:
+                return prune(node['nodes'][0])
+            elif len(node['nodes']) == 2:
+                node['nodes'][0] = prune(node['nodes'][0])
+                node['nodes'][1] = prune(node['nodes'][1])
+                return node
+    root = prune(root)
+
     queue = []
     queue.append(root)
     id = 1

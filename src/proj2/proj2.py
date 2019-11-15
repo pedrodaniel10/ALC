@@ -7,8 +7,8 @@ from id3 import run_id3, get_number_nodes, get_model_id3
 
 file_name = "smt_lib"
 solvers = {
-    "z3": ['z3', file_name],
-    "cvc4": ['cvc4', "--lang smt", "--produce-models", file_name]
+    "z3": ['./z3', file_name],
+    "cvc4": ['./cvc4', "--lang smt", "--produce-models", file_name]
 }
 solver = solvers["z3"]
 solver = " ".join(solver)
@@ -94,6 +94,7 @@ class Enc:
         self.encode_additional_constraints(self.node_count)
 
     def encode_tree(self, n):
+        '''Encode tree with n nodes'''
         # Constraint 1: ~v1
         self.add_constraint(Not(self.v(1)))
 
@@ -223,7 +224,7 @@ class Enc:
                 # 2
                 self.add_iff(self.tau(t, i), Or(self.tau(t, i-1),
                                                 And(self.tau(t-1, i-1), Not(self.v(i)))))
-                # Proposition 2
+                # Proposition 3
                 self.add_if(self.tau(t, i), And(
                     Not(self.l(i, 2*(t-1))), Not(self.r(i, 2*t - 1))))
 
@@ -396,7 +397,8 @@ if __name__ == "__main__":
     root = run_id3(samples, nms[0])
     n = get_number_nodes(root)
     model = get_model_id3(root)
-    if n % 2 == 0:  # Returns an even number of nodes
+    if n % 2 == 0:
+        # Returns an even number of nodes (it shouldn't happen, just for precaution)
         n += 1
         model = enconde_run_smt(n, nms[0])
     elif model == None:

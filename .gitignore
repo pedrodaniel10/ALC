@@ -105,4 +105,7 @@ venv.bak/
 
 # VSCode
 .vscode/
+
+# Tests and temporary files
 smt_lib
+/src/**/chk*
