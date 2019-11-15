@@ -49,4 +49,5 @@ The program expects input for stdin, so you can feed him with an example file:
 
 ## References
 [[Narodytska et al](https://www.ijcai.org/proceedings/2018/0189.pdf)] N. Narodytska, A. Ignatiev, F. Pereira, and J. Marques-Silva.  Learning optimal decision trees with SAT.  In J. Lang, editor,Proceedings of the Twenty-Seventh International JointConference on Artificial Intelligence, IJCAI 2018, July 13-19, 2018, Stockholm, Sweden.,pages 1362–1368. ijcai.org, 2018.
+
 [[Qui86](http://www.hunch.net/~coms-4771/quinlan.pdf)] J. R. Quinlan,Induction of decision trees, Mach. Learn.1(1986), no. 1, 81–106.
