@@ -364,6 +364,22 @@ def parse(f):
     return (nms, samples)
 
 
+def enconde_run_smt(n, k):
+    print("# encoding with {} nodes".format(n))
+    e = Enc(k, samples)
+    e.enc(n)
+    print("# encoded constraints to file")
+    e.write_enc(file_name)
+    print("# END encoded constraints")
+    print("# sending to solver '" + solver + "'")
+
+    p = subprocess.Popen(solver, shell=True, stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    (output, _) = p.communicate()
+    print("# decoding result from solver")
+    return get_model(output.decode("UTF-8"))
+
+
 if __name__ == "__main__":
     print("# reading from stdin")
     nms, samples = parse(sys.stdin)
@@ -371,6 +387,12 @@ if __name__ == "__main__":
     root = run_id3(samples, nms[0])
     n = get_number_nodes(root)
     model = get_model_id3(root)
+    if n % 2 == 0:  # Returns an even number of nodes
+        n += 1
+        model = enconde_run_smt(n, nms[0])
+    elif model == None:
+        model = enconde_run_smt(n, nms[0])
+
     print("# Obtained tree with {} nodes from id3".format(n))
     i = n - 2
     node_count = n
@@ -379,23 +401,12 @@ if __name__ == "__main__":
             i = 3
         if i < 3:
             break
-        print("# encoding with {} nodes".format(i))
-        e = Enc(nms[0], samples)
-        e.enc(i)
-        print("# encoded constraints to file")
-        e.write_enc(file_name)
-        print("# END encoded constraints")
-        print("# sending to solver '" + solver + "'")
-
-        p = subprocess.Popen(solver, shell=True, stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        (output, err) = p.communicate()
-        print("# decoding result from solver")
-        new_model = get_model(output.decode("UTF-8"))
+        new_model = enconde_run_smt(i, nms[0])
         if new_model == None:  # => UNSAT
-            print("# UNSAT, output last SAT model")
+            print("# UNSAT {} nodes, output last SAT model".format(i))
             break
         else:
+            print("# SAT {} nodes".format(i))
             node_count = i
             i -= 2
             model = new_model

@@ -160,11 +160,16 @@ def get_model_id3(root):
 
     def traverse(node):
         nonlocal model
+        if model == None:
+            return
         if 'label' in node:
             model["v_{}".format(node['id'])] = True
             model["c_{}".format(node['id'])] = {
                 0: False, 1: True}[node['label']]
         elif 'attribute' in node:
+            if (len(node['nodes']) != 2):
+                model = None
+                return
             model["v_{}".format(node['id'])] = False
             model["l_{}_{}".format(node['id'], node['nodes'][0]['id'])] = True
             model["r_{}_{}".format(node['id'], node['nodes'][1]['id'])] = True
