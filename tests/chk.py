@@ -20,7 +20,8 @@ def parse_samples(f):
             nms = [int(l) for l in s]
     return (nms, samples)
 
-def chk(ls, samples):
+def chk(nfts, nns, ls, samples):
+    all_ns = set()
     lns = dict() #  left children
     rns = dict() #  right children
     a = dict() #  assigned features
@@ -36,6 +37,8 @@ def chk(ls, samples):
         if spl[0] == 'l' or spl[0] == 'r':
             vs = [ int(s) for s in spl[1:] ]
             assert(len(vs)==2)
+            all_ns.add(vs[0])
+            all_ns.add(vs[1])
             if spl[0] == 'l':
                 if vs[0] in lns: err("{}  already has left child".format(vs[0]))
                 lns[vs[0]] = vs[1]
@@ -45,6 +48,7 @@ def chk(ls, samples):
         if spl[0] == 'c':
             vs = [ int(s) for s in spl[1:] ]
             assert(len(vs)==2)
+            all_ns.add(vs[0])
             if vs[1] == 0:
                 fl.add(vs[0])
             elif vs[1] == 1:
@@ -56,6 +60,9 @@ def chk(ls, samples):
             assert(len(vs)==2)
             if vs[1] in a: err("{}  already has assigned feature".format(vs[1]))
             a[vs[1]] = vs[0]
+            all_ns.add(vs[1])
+    if len(all_ns) != nns:
+        err("wrong number of nodes")
 
     def check_structure(nd, visited):
         if nd in visited: err("there is a cycle on node {}".format(nd))
@@ -78,7 +85,7 @@ def chk(ls, samples):
         if nd in fl: return 0
         if nd in tl: return 1
         ftr = a[nd]
-        nxt = lns[nd] if sample[ftr - 1] == 0 else rns[nd] 
+        nxt = lns[nd] if sample[ftr - 1] == 0 else rns[nd]
         return get_val(nxt, sample)
 
     for sample  in samples:
@@ -97,6 +104,5 @@ if __name__ == "__main__":
     with open(sys.argv[1]) as sf:
         nms, samples = parse_samples(sf)
 
-    if chk(sys.stdin, samples):
+    if chk(nms[0], nms[1], sys.stdin, samples):
         print('OK')
-
