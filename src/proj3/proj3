@@ -32,6 +32,7 @@ def run(feature_count, node_count, samples):
     sol_in = ''
     sol_in += 'int: n = {};\n'.format(node_count)
     sol_in += 'int: k = {};\n'.format(feature_count)
+    sol_in += 'int: qlen = {};\n'.format(4)  # len(samples))
     # add main.mzn to the input
     with open('main.mzn') as mf:
         sol_in += '\n' + mf.read()

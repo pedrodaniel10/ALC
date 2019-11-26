@@ -1,6 +1,8 @@
 % fixed sets
 set of int: NODES=1..n;
 set of int: FEATURES=1..k;
+set of int: QLEN=1..qlen;
+set of int: CLASSIFICATION=0..1;
 
 % Function LR and RR
 function array[int] of var opt int: lr(int: i) =
@@ -15,18 +17,26 @@ function array[int] of var opt int: rr(int: i) =
        } in
   [x | x in lb..ub where abs(i-x) >= 2 /\ x mod 2 != 0];
 
-function var int: b2i(bool: b) =
-  if b then 1 else 0 endif;
-
 % example declarations of arrays if variables
 array[NODES] of var bool: v;
 array[NODES,NODES] of var bool: l;
 array[NODES,NODES] of var bool: r;
 array[NODES,NODES] of var bool: p;
-array[0..n,NODES] of var bool: lamb;
-array[0..n,NODES] of var bool: tau;
-array[NODES] of var FEATURES: s;
+array[0..n,0..n] of var bool: lamb;
+array[0..n,0..n] of var bool: tau;
 
+array[FEATURES,NODES] of var bool: a;
+array[FEATURES,NODES] of var bool: u;
+array[FEATURES,NODES] of var bool: d0;
+array[FEATURES,NODES] of var bool: d1;
+array[NODES] of var bool: c;
+
+array[QLEN] of var CLASSIFICATION: eq;
+array[QLEN, FEATURES] of var CLASSIFICATION: samples;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%% Encode Tree
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Constraint 1: ~v1
 constraint not v[1];
 
@@ -77,3 +87,71 @@ constraint forall(i in NODES, t in 1..i) (
 constraint forall(i in NODES, t in ceil(i div 2)..i) (
   tau[t,i] -> not l[i, 2*(t-1)] /\ not r[i, 2*t-1]
 );
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%% Encode Decision
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Constraint 7:
+constraint forall(j in 2..n, rr in FEATURES)(
+  let {
+    set of int: bound = floor(j div 2)..j-1;
+    array[bound] of var bool: x;
+    constraint forall(i in bound) (
+      x[i] = ((p[j,i] /\ d0[rr,i]) \/ (a[rr,i] /\ r[i,j]))
+    );
+  } in
+  d0[rr,j] <-> exists(x)
+);
+constraint forall(r in FEATURES) (not d0[r,1]);
+
+% Constraint 8:
+constraint forall(j in 2..n, r in FEATURES)(
+  let {
+    set of int: bound = floor(j div 2)..j-1;
+    array[bound] of var bool: x;
+    constraint forall(i in bound) (
+      x[i] = ((p[j,i] /\ d1[r,i]) \/ (a[r,i] /\ l[i,j]))
+    );
+  } in
+  d1[r,j] <-> exists(x)
+);
+constraint forall(r in FEATURES) (not d1[r,1]);
+
+% Constraint 9:
+constraint forall(j in NODES, r in FEATURES, i in floor(j div 2)..j-1) (
+  (u[r,i] /\ p[j,i]) -> not a[r,j]
+);
+constraint forall(j in NODES, r in FEATURES)(
+  let {
+    set of int: bound = floor(j div 2)..j-1;
+    array[bound] of var bool: x;
+    constraint forall(i in bound) (
+      x[i] = (u[r,i] /\ p[j,i])
+    );
+  } in
+  u[r,j] <-> (a[r,j] /\ exists(x))
+);
+
+% Constraint 10:
+constraint forall(j in NODES)(
+  not v[j] -> sum (r in FEATURES) (a[r,j]) = 1
+);
+
+% Constraint 11:
+constraint forall(j in NODES)(
+  v[j] -> sum (r in FEATURES) (a[r,j]) = 0
+);
+
+% Constraint 12 & 13:
+constraint forall(j in NODES, q in QLEN)(
+  let {
+    array[FEATURES] of var bool: x;
+    constraint forall(r in FEATURES) (
+      x[r] = if samples[q,r] = 0 then d0[r,j] else d1[r,j] endif
+    );
+  } in
+  if eq[q] = 0 then (v[j] /\ c[j]) else (v[j] /\ not c[j]) endif -> exists(x)
+);
+
+constraint eq = [1, 1, 1, 0];
+constraint samples = [|0,0|0,1|1,1|1,0|];
