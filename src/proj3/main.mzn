@@ -6,18 +6,20 @@ set of int: CLASSIFICATION=0..1;
 
 % Function LR and RR
 function array[int] of var opt int: lr(int: i) =
-  let {var int: lb = i+1;
-       var int: ub = min(2*i, n-1);
-       } in
+  let {
+    var int: lb = i+1;
+    var int: ub = min(2*i, n-1);
+  } in
   [x | x in lb..ub where abs(i-x) >= 1 /\ x mod 2 = 0];
   
 function array[int] of var opt int: rr(int: i) =
-  let {var int: lb = i+2;
-       var int: ub = min(2*i + 1, n);
-       } in
+  let {
+    var int: lb = i+2;
+    var int: ub = min(2*i + 1, n);
+  } in
   [x | x in lb..ub where abs(i-x) >= 2 /\ x mod 2 != 0];
 
-% example declarations of arrays if variables
+% Declare variables
 array[NODES] of var bool: v;
 array[NODES,NODES] of var bool: l;
 array[NODES,NODES] of var bool: r;
@@ -40,7 +42,7 @@ array[QLEN, FEATURES] of var CLASSIFICATION: samples;
 % Constraint 1: ~v1
 constraint not v[1];
 
-% vn and vn-1 are leave
+% vn and vn-1 are leaves
 constraint v[n-1];
 constraint v[n];
 
@@ -103,7 +105,7 @@ constraint forall(j in 2..n, rr in FEATURES)(
   d0[rr,j] <-> exists(x)
 );
 constraint forall(r in FEATURES) (not d0[r,1]);
-
+% Eliminate wrong right childrens
 constraint forall(j in 2..n, i in NODES) (
   not exists(el in rr(i)) (j=el) -> not r[i,j]
 );
@@ -120,7 +122,7 @@ constraint forall(j in 2..n, r in FEATURES)(
   d1[r,j] <-> exists(x)
 );
 constraint forall(r in FEATURES) (not d1[r,1]);
-
+% Eliminate wrong left childrens
 constraint forall(j in 2..n, i in NODES) (
   not exists(el in lr(i)) (j=el) -> not l[i,j]
 );

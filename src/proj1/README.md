@@ -28,7 +28,7 @@ The program assumes that the SAT solver (lingeling) is in the same directory whe
 And you can run in various ways like:
 
 ```bash
-    python ./proj1.py 
+    python3 ./proj1.py 
 ```
 Or like:
 ```bash

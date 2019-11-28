@@ -1,7 +1,7 @@
-%run solver
+% run solver
 solve satisfy;
 
-% example prints
+% Prints tree
 output [ "l \(i) \(j)\n" | i in NODES, j in NODES where fix(l[i,j])] ;
 output [ "r \(i) \(j)\n" | i in NODES, j in NODES where fix(r[i,j])] ;
 output [ "a \(r) \(j)\n" | r in FEATURES, j in NODES where fix(a[r,j])] ;
