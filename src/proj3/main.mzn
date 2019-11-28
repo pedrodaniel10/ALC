@@ -104,6 +104,10 @@ constraint forall(j in 2..n, rr in FEATURES)(
 );
 constraint forall(r in FEATURES) (not d0[r,1]);
 
+constraint forall(j in 2..n, i in NODES) (
+  not exists(el in rr(i)) (j=el) -> not r[i,j]
+);
+
 % Constraint 8:
 constraint forall(j in 2..n, r in FEATURES)(
   let {
@@ -116,6 +120,10 @@ constraint forall(j in 2..n, r in FEATURES)(
   d1[r,j] <-> exists(x)
 );
 constraint forall(r in FEATURES) (not d1[r,1]);
+
+constraint forall(j in 2..n, i in NODES) (
+  not exists(el in lr(i)) (j=el) -> not l[i,j]
+);
 
 % Constraint 9:
 constraint forall(j in NODES, r in FEATURES, i in floor(j div 2)..j-1) (
@@ -134,12 +142,12 @@ constraint forall(j in NODES, r in FEATURES)(
 
 % Constraint 10:
 constraint forall(j in NODES)(
-  not v[j] -> sum (r in FEATURES) (a[r,j]) = 1
+  not v[j] -> (sum (r in FEATURES) (a[r,j]) = 1)
 );
 
 % Constraint 11:
 constraint forall(j in NODES)(
-  v[j] -> sum (r in FEATURES) (a[r,j]) = 0
+  v[j] -> (sum (r in FEATURES) (a[r,j]) = 0)
 );
 
 % Constraint 12 & 13:
@@ -153,5 +161,3 @@ constraint forall(j in NODES, q in QLEN)(
   if eq[q] = 0 then (v[j] /\ c[j]) else (v[j] /\ not c[j]) endif -> exists(x)
 );
 
-constraint eq = [1, 1, 1, 0];
-constraint samples = [|0,0|0,1|1,1|1,0|];
