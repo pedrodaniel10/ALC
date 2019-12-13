@@ -23,8 +23,20 @@ r(I,J) :- node(I), node(J), p(J,I), J >= I + 2, J <= 2*I + 1, J \ 2 = 1.
 p(J,I) :- node(I), node(J), l(I,J), J >= I + 1, J <= 2*I, J \ 2 = 0.
 p(J,I) :- node(I), node(J), r(I,J), J >= I + 2, J <= 2*I + 1, J \ 2 = 1.
 
-%% Constraint 6
+% Constraint 6
 1{p(J,I) : I=J/2..J-1}1 :- J=2..n.
+
+% Additional constraints
+lamb(0,I) :- node(I).
+lamb(T,I) :- 1{lamb(T,I-1); lamb(T-1,I-1)}, v(I), node(I), T=1..i/2.
+tau(0,I) :- node(I).
+tau(T,I) :- 1{tau(T,I-1); tau(T-1,I-1)}, not v(I), node(I), T=1..i.
+
+% Preposition 2
+not l(I,2*(I-T+1)), not r(I, 2*(I-T+1)) :- lamb(T,I), node(I), T=1..i/2.
+
+% Preposition 2
+not l(I,2*(T-1)), not r(I,2*T-1) :- tau(T,I), node(I), T=i/2+1..I.
 
 % Constraint 7
 d0(R,J) :- p(J,I), d0(R,I).

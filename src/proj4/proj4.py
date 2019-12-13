@@ -10,7 +10,7 @@ solvers = {
     "clingo": ['clingo', '-n1'],
 }
 solver = solvers["clingo"]
-dbg = True
+dbg = False
 
 def v(i): return 'v({})'.format(i)
 def l(i, j): return 'l({},{})'.format(i, j)
