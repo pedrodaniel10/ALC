@@ -7,6 +7,7 @@ The project is to develop a software tool for constructing decision trees given 
 - [Project 1 (SAT)](/src/proj1)
 - [Project 2 (SMT)](/src/proj2)
 - [Project 3 (CSP)](/src/proj3)
+- [Project 4 (ASP)](/src/proj4)
 
 ## Requirements
 - GNU/Linux
